@@ -1,0 +1,20 @@
+{
+  "name": "multi-agent-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Automatic multi-agent user question handling platform.",
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "check": "npm run typecheck && npm run lint && npm run build"
+  },
+  "workspaces": [
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  }
+}
+
