@@ -1,4 +1,14 @@
-import { Bot, Command, UserRound } from "lucide-react";
+import {
+  Bot,
+  Check,
+  Clipboard,
+  Command,
+  Pencil,
+  RotateCcw,
+  Save,
+  UserRound
+} from "lucide-react";
+import { useState } from "react";
 import type { RunAttachment } from "../../types";
 import { formatDateTime } from "../../utils/time";
 import { MessageContent } from "./MessageContent";
@@ -17,6 +27,10 @@ interface WorkerChatPanelProps {
   error: string;
   isSubmitting: boolean;
   messages: ChatMessage[];
+  onEditMessage: (messageId: string, content: string) => void;
+  onRegenerate: (messageId: string) => void;
+  onRegenerateFromUser: (messageId: string) => void;
+  regeneratingMessageId: string | null;
   theme: WorkerChatTheme;
 }
 
@@ -76,13 +90,74 @@ const renderAttachments = (attachments: RunAttachment[] = []) => {
   );
 };
 
+const writeClipboardText = async (content: string) => {
+  if (window.navigator.clipboard?.writeText) {
+    await window.navigator.clipboard.writeText(content);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = content;
+  textarea.style.left = "-9999px";
+  textarea.style.position = "fixed";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+};
+
 function WorkerChatPanel({
   commandError,
   error,
   isSubmitting,
   messages,
+  onEditMessage,
+  onRegenerate,
+  onRegenerateFromUser,
+  regeneratingMessageId,
   theme
 }: WorkerChatPanelProps) {
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingContent, setEditingContent] = useState("");
+
+  const copyMessage = async (message: ChatMessage) => {
+    const attachmentNames = (message.attachments ?? [])
+      .map((attachment) => `[附件] ${attachment.name}`)
+      .join("\n");
+    const content = [message.content, attachmentNames].filter(Boolean).join("\n\n");
+
+    try {
+      await writeClipboardText(content);
+      setCopiedMessageId(message.id);
+      window.setTimeout(() => setCopiedMessageId(null), 1400);
+    } catch {
+      setCopiedMessageId(null);
+    }
+  };
+
+  const startEditMessage = (message: ChatMessage) => {
+    setEditingMessageId(message.id);
+    setEditingContent(message.content);
+  };
+
+  const cancelEditMessage = () => {
+    setEditingMessageId(null);
+    setEditingContent("");
+  };
+
+  const saveEditMessage = (messageId: string) => {
+    const nextContent = editingContent.trim();
+
+    if (!nextContent) {
+      return;
+    }
+
+    onEditMessage(messageId, nextContent);
+    cancelEditMessage();
+  };
+
   return (
     <div className="flex-1 space-y-5 py-6">
       {messages.length === 0 ? (
@@ -134,9 +209,84 @@ function WorkerChatPanel({
                   : "flex max-w-[82%] flex-col items-start"
               }
             >
-              <time className="mb-1 px-1 text-[11px] text-slate-400">
-                {formatDateTime(message.timestamp)}
-              </time>
+              <div
+                className={
+                  message.role === "user"
+                    ? "mb-1 flex items-center gap-1 self-end px-1"
+                    : "mb-1 flex items-center gap-1 self-start px-1"
+                }
+              >
+                <time className="text-[11px] text-slate-400">
+                  {formatDateTime(message.timestamp)}
+                </time>
+                <button
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-white hover:text-slate-700 active:translate-y-px"
+                  onClick={() => void copyMessage(message)}
+                  title={copiedMessageId === message.id ? "已复制" : "复制内容"}
+                  type="button"
+                >
+                  {copiedMessageId === message.id ? (
+                    <Check size={13} />
+                  ) : (
+                    <Clipboard size={13} />
+                  )}
+                </button>
+                {message.role === "assistant" ? (
+                  <button
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-white hover:text-slate-700 active:translate-y-px disabled:cursor-wait disabled:text-slate-300 disabled:active:translate-y-0"
+                    disabled={isSubmitting || regeneratingMessageId === message.id}
+                    onClick={() => onRegenerate(message.id)}
+                    title={
+                      regeneratingMessageId === message.id
+                        ? "正在重新生成"
+                        : "重新生成"
+                    }
+                    type="button"
+                  >
+                    <RotateCcw
+                      className={
+                        regeneratingMessageId === message.id
+                          ? "animate-spin"
+                          : undefined
+                      }
+                      size={13}
+                    />
+                  </button>
+                ) : null}
+                {message.role === "user" ? (
+                  <>
+                    <button
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-white hover:text-slate-700 active:translate-y-px disabled:cursor-not-allowed disabled:text-slate-300 disabled:active:translate-y-0"
+                      disabled={isSubmitting || regeneratingMessageId === message.id}
+                      onClick={() => onRegenerateFromUser(message.id)}
+                      title={
+                        regeneratingMessageId === message.id
+                          ? "正在重新生成"
+                          : "用这条输入重新生成"
+                      }
+                      type="button"
+                    >
+                      <RotateCcw
+                        className={
+                          regeneratingMessageId === message.id
+                            ? "animate-spin"
+                            : undefined
+                        }
+                        size={13}
+                      />
+                    </button>
+                    <button
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-white hover:text-slate-700 active:translate-y-px disabled:cursor-not-allowed disabled:text-slate-300 disabled:active:translate-y-0"
+                      disabled={isSubmitting || editingMessageId === message.id}
+                      onClick={() => startEditMessage(message)}
+                      title="编辑输入"
+                      type="button"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                  </>
+                ) : null}
+              </div>
               <article
                 className={
                   message.role === "user"
@@ -149,8 +299,38 @@ function WorkerChatPanel({
                     : undefined
                 }
               >
-                <MessageContent content={message.content} />
-                {renderAttachments(message.attachments)}
+                {editingMessageId === message.id ? (
+                  <div className="grid gap-2">
+                    <textarea
+                      className="min-h-24 w-80 max-w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-slate-600"
+                      onChange={(event) => setEditingContent(event.target.value)}
+                      value={editingContent}
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button
+                        className="flex h-8 items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 text-xs text-slate-600 transition hover:bg-slate-50 active:translate-y-px"
+                        onClick={cancelEditMessage}
+                        type="button"
+                      >
+                        取消
+                      </button>
+                      <button
+                        className="flex h-8 items-center gap-1 rounded-md bg-slate-900 px-2.5 text-xs font-medium text-white transition hover:bg-slate-700 active:translate-y-px disabled:cursor-not-allowed disabled:bg-slate-300 disabled:active:translate-y-0"
+                        disabled={!editingContent.trim()}
+                        onClick={() => saveEditMessage(message.id)}
+                        type="button"
+                      >
+                        <Save size={13} />
+                        保存
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <MessageContent content={message.content} />
+                    {renderAttachments(message.attachments)}
+                  </>
+                )}
               </article>
             </div>
             {message.role === "user" ? renderAvatar(message.role) : null}
@@ -161,10 +341,12 @@ function WorkerChatPanel({
         <div className="flex items-start justify-start gap-3">
           {renderAvatar("assistant")}
           <div
-            className="rounded-2xl px-4 py-3 text-sm text-slate-500"
+            className="w-full max-w-md rounded-2xl px-4 py-3"
             style={{ backgroundColor: theme.panel }}
           >
-            正在处理...
+            <div className="agent-shimmer h-3 w-24 rounded bg-slate-200" />
+            <div className="agent-shimmer mt-3 h-3 w-full rounded bg-slate-200" />
+            <div className="agent-shimmer mt-2 h-3 w-2/3 rounded bg-slate-200" />
           </div>
         </div>
       ) : null}

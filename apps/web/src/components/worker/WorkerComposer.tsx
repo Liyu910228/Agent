@@ -142,7 +142,7 @@ function WorkerComposer({
         options={commandOptions}
         visible={showSlashMenu}
       />
-      <div className="rounded-2xl border border-slate-300 bg-white p-2 shadow-lg shadow-slate-200/60">
+      <div className="rounded-2xl border border-slate-300 bg-white p-2 shadow-[0_20px_40px_-24px_rgba(15,23,42,0.35)]">
         {attachments.length > 0 ? (
           <div className="mb-2 flex flex-wrap gap-2 border-b border-slate-100 pb-2">
             {attachments.map((attachment) => (
@@ -172,9 +172,14 @@ function WorkerComposer({
           </div>
         ) : null}
 
+        <SelectedCommandChips
+          onRemove={onRemoveCommand}
+          selections={selectedCommands}
+        />
+
         <div className="flex items-end gap-2">
           <label
-            className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+            className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 active:translate-y-px"
             title="上传图片或文档"
           >
             <Paperclip size={18} />
@@ -195,8 +200,8 @@ function WorkerComposer({
           <button
             className={
               isListening
-                ? "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600 ring-1 ring-rose-100 hover:bg-rose-100"
-                : "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                ? "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600 ring-1 ring-rose-100 transition hover:bg-rose-100 active:translate-y-px"
+                : "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 active:translate-y-px"
             }
             disabled={isSubmitting}
             onClick={toggleVoiceInput}
@@ -205,10 +210,6 @@ function WorkerComposer({
           >
             {isListening ? <MicOff size={18} /> : <Mic size={18} />}
           </button>
-          <SelectedCommandChips
-            onRemove={onRemoveCommand}
-            selections={selectedCommands}
-          />
           <textarea
             className="max-h-40 min-h-11 flex-1 resize-none border-0 px-2 py-2 text-sm outline-none"
             disabled={isSubmitting}
@@ -218,7 +219,7 @@ function WorkerComposer({
             value={question}
           />
           <button
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white hover:opacity-90 disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white transition hover:opacity-90 active:translate-y-px disabled:cursor-not-allowed disabled:bg-slate-300 disabled:active:translate-y-0"
             disabled={(!question.trim() && attachments.length === 0) || isSubmitting}
             onClick={onSubmit}
             style={{ backgroundColor: activeAccent }}

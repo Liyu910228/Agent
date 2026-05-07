@@ -90,10 +90,10 @@ export function SelectedCommandChips({
   }
 
   return (
-    <div className="flex max-w-44 shrink-0 flex-wrap gap-1.5 pl-1">
+    <div className="mb-2 flex max-h-20 flex-wrap gap-1.5 overflow-auto pl-1">
       {selections.map((selection) => (
         <span
-          className="flex max-w-40 items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700"
+          className="flex max-w-48 items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700"
           key={`${selection.kind}-${selection.id}`}
           title={selection.name}
         >

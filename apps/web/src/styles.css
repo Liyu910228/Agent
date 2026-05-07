@@ -11,5 +11,40 @@ body {
   min-width: 320px;
   background: #f8fafc;
   color: #020617;
+  font-family:
+    Geist,
+    Satoshi,
+    "Segoe UI",
+    "Microsoft YaHei",
+    system-ui,
+    sans-serif;
   text-wrap: pretty;
+}
+
+@keyframes agent-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.agent-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.agent-shimmer::after {
+  animation: agent-shimmer 1.4s ease-in-out infinite;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.72),
+    transparent
+  );
+  content: "";
+  inset: 0;
+  position: absolute;
 }

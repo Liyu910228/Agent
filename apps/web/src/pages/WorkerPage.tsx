@@ -134,6 +134,9 @@ function WorkerPage({ user, status, onLogout }: WorkerPageProps) {
   const [selectedCommands, setSelectedCommands] = useState<SlashSelection[]>([]);
   const [attachments, setAttachments] = useState<RunAttachment[]>([]);
   const [commandError, setCommandError] = useState("");
+  const [regeneratingMessageId, setRegeneratingMessageId] = useState<
+    string | null
+  >(null);
   const activeChat = chats.find((chat) => chat.id === activeChatId) ?? chats[0];
   const activeTheme =
     chatThemes.find((theme) => theme.id === activeChat.themeId) ?? chatThemes[0];
@@ -366,6 +369,151 @@ function WorkerPage({ user, status, onLogout }: WorkerPageProps) {
     }
   };
 
+  const handleRegenerate = async (assistantMessageId: string) => {
+    if (isSubmitting || regeneratingMessageId) {
+      return;
+    }
+
+    const submittedChatId = activeChat.id;
+    const assistantIndex = activeChat.messages.findIndex(
+      (message) => message.id === assistantMessageId
+    );
+    const userMessage = activeChat.messages
+      .slice(0, assistantIndex)
+      .reverse()
+      .find((message) => message.role === "user");
+
+    if (!userMessage) {
+      setError("没有找到可重新生成的用户问题。");
+      return;
+    }
+
+    setError("");
+    setRegeneratingMessageId(assistantMessageId);
+
+    try {
+      const response = await apiClient.createRun(
+        userMessage.content,
+        undefined,
+        userMessage.attachments
+      );
+      const nextTimestamp =
+        response.run.completedAt || response.run.createdAt || new Date().toISOString();
+
+      updateChat(submittedChatId, (chat) => ({
+        ...chat,
+        messages: chat.messages.map((message) =>
+          message.id === assistantMessageId
+            ? {
+                ...message,
+                content: response.run.finalAnswer,
+                id: response.run.id,
+                timestamp: nextTimestamp
+              }
+            : message
+        ),
+        updatedAt: nextTimestamp
+      }));
+    } catch (regenerateError) {
+      setError(
+        regenerateError instanceof Error ? regenerateError.message : "重新生成失败"
+      );
+    } finally {
+      setRegeneratingMessageId(null);
+    }
+  };
+
+  const handleRegenerateFromUser = async (userMessageId: string) => {
+    if (isSubmitting || regeneratingMessageId) {
+      return;
+    }
+
+    const submittedChatId = activeChat.id;
+    const userIndex = activeChat.messages.findIndex(
+      (message) => message.id === userMessageId
+    );
+    const userMessage = activeChat.messages[userIndex];
+
+    if (!userMessage || userMessage.role !== "user") {
+      setError("没有找到可重新生成的用户问题。");
+      return;
+    }
+
+    const nextAssistant = activeChat.messages
+      .slice(userIndex + 1)
+      .find((message) => message.role === "assistant");
+
+    setError("");
+    setRegeneratingMessageId(userMessageId);
+
+    try {
+      const response = await apiClient.createRun(
+        userMessage.content,
+        undefined,
+        userMessage.attachments
+      );
+      const nextTimestamp =
+        response.run.completedAt || response.run.createdAt || new Date().toISOString();
+      const assistantMessage: ChatMessage = {
+        id: response.run.id,
+        role: "assistant",
+        content: response.run.finalAnswer,
+        timestamp: nextTimestamp
+      };
+
+      updateChat(submittedChatId, (chat) => {
+        if (nextAssistant) {
+          return {
+            ...chat,
+            messages: chat.messages.map((message) =>
+              message.id === nextAssistant.id ? assistantMessage : message
+            ),
+            updatedAt: nextTimestamp
+          };
+        }
+
+        return {
+          ...chat,
+          messages: [
+            ...chat.messages.slice(0, userIndex + 1),
+            assistantMessage,
+            ...chat.messages.slice(userIndex + 1)
+          ],
+          updatedAt: nextTimestamp
+        };
+      });
+    } catch (regenerateError) {
+      setError(
+        regenerateError instanceof Error ? regenerateError.message : "重新生成失败"
+      );
+    } finally {
+      setRegeneratingMessageId(null);
+    }
+  };
+
+  const handleEditMessage = (messageId: string, content: string) => {
+    const editedAt = new Date().toISOString();
+
+    updateActiveChat((chat) => {
+      const nextMessages = chat.messages.map((message) =>
+        message.id === messageId
+          ? { ...message, content, timestamp: editedAt }
+          : message
+      );
+      const firstMessage = nextMessages[0];
+
+      return {
+        ...chat,
+        messages: nextMessages,
+        title:
+          firstMessage?.id === messageId && firstMessage.role === "user"
+            ? content.slice(0, 28)
+            : chat.title,
+        updatedAt: editedAt
+      };
+    });
+  };
+
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && slashQuery !== null && commandOptions[0]) {
       event.preventDefault();
@@ -380,7 +528,7 @@ function WorkerPage({ user, status, onLogout }: WorkerPageProps) {
   };
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden bg-white text-slate-950 md:flex-row">
+    <main className="flex min-h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-white text-slate-950 md:flex-row">
       <WorkerSidebar
         activeChatId={activeChat.id}
         activeThemeId={activeChat.themeId}
@@ -416,6 +564,10 @@ function WorkerPage({ user, status, onLogout }: WorkerPageProps) {
                 error={error}
                 isSubmitting={isSubmitting}
                 messages={messages}
+                onEditMessage={handleEditMessage}
+                onRegenerate={handleRegenerate}
+                onRegenerateFromUser={handleRegenerateFromUser}
+                regeneratingMessageId={regeneratingMessageId}
                 theme={activeTheme}
               />
             </div>

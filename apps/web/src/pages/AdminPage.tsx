@@ -312,7 +312,7 @@ function AdminPage({ user, status, onLogout }: AdminPageProps) {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-950">
+    <main className="min-h-[100dvh] bg-slate-50 text-slate-950">
       <AdminHeader onLogout={onLogout} status={status} user={user} />
 
       <section className="mx-auto max-w-7xl px-6 py-6">

@@ -36,10 +36,10 @@ function WorkerSidebar({
   themes
 }: WorkerSidebarProps) {
   return (
-    <aside className="flex max-h-screen w-full shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-slate-950 text-white md:h-screen md:w-72">
+    <aside className="flex max-h-[42dvh] w-full shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-slate-950 text-white md:max-h-[100dvh] md:w-72">
       <div className="border-b border-white/10 p-3">
         <button
-          className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-white/15 bg-white/10 text-sm font-medium hover:bg-white/15"
+          className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-white/15 bg-white/10 text-sm font-medium transition hover:bg-white/15 active:translate-y-px"
           onClick={onCreateChat}
           type="button"
         >
@@ -58,7 +58,7 @@ function WorkerSidebar({
               className={
                 chat.id === activeChatId
                   ? "flex w-full items-start gap-2 rounded-md bg-white/15 px-2.5 py-2 text-left"
-                  : "flex w-full items-start gap-2 rounded-md px-2.5 py-2 text-left text-slate-300 hover:bg-white/10 hover:text-white"
+                  : "flex w-full items-start gap-2 rounded-md px-2.5 py-2 text-left text-slate-300 transition hover:bg-white/10 hover:text-white active:translate-y-px"
               }
               key={chat.id}
               onClick={() => onSelectChat(chat.id)}
@@ -87,7 +87,7 @@ function WorkerSidebar({
               className={
                 theme.id === activeThemeId
                   ? "rounded-md border border-white/70 bg-white/10 p-2 text-left"
-                  : "rounded-md border border-white/10 bg-white/5 p-2 text-left hover:border-white/30"
+                  : "rounded-md border border-white/10 bg-white/5 p-2 text-left transition hover:border-white/30 active:translate-y-px"
               }
               key={theme.id}
               onClick={() => onThemeChange(theme.id)}

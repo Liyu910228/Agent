@@ -36,7 +36,15 @@ function SkillPanel({
         </span>
       </div>
       <div className="max-h-[34rem] space-y-2 overflow-auto p-5">
-        {skills.map((skill) => (
+        {skills.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center">
+            <p className="text-sm font-medium text-slate-700">暂无 Skill</p>
+            <p className="mt-1 text-xs text-slate-500">
+              全局或内置 Skill 加载后会显示在这里。
+            </p>
+          </div>
+        ) : (
+          skills.map((skill) => (
           <div
             className="rounded-lg border border-slate-200 p-3 text-sm transition hover:border-slate-300 hover:bg-slate-50/60"
             key={skill.id}
@@ -49,8 +57,8 @@ function SkillPanel({
                 <button
                   className={
                     skill.enabled
-                      ? "rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700"
-                      : "rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500"
+                      ? "rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 transition active:translate-y-px"
+                      : "rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500 transition active:translate-y-px"
                   }
                   onClick={() => onToggleSkill(skill)}
                   type="button"
@@ -59,7 +67,7 @@ function SkillPanel({
                 </button>
                 {editingSkillId === skill.id ? (
                   <button
-                    className="rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white hover:bg-slate-700"
+                    className="rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white transition hover:bg-slate-700 active:translate-y-px"
                     onClick={() => onSaveSkill(skill.id)}
                     type="button"
                   >
@@ -67,7 +75,7 @@ function SkillPanel({
                   </button>
                 ) : (
                   <button
-                    className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                    className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 transition hover:bg-slate-50 active:translate-y-px"
                     onClick={() => onEditSkill(skill)}
                     type="button"
                   >
@@ -109,7 +117,8 @@ function SkillPanel({
                   : "内置 Skill"}
             </p>
           </div>
-        ))}
+          ))
+        )}
       </div>
     </section>
   );

@@ -34,7 +34,7 @@ function WorkerHeader({
         </div>
         <div className="flex items-center gap-2">
           <button
-            className="flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+            className="flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm transition hover:bg-slate-100 active:translate-y-px disabled:cursor-not-allowed disabled:text-slate-400 disabled:active:translate-y-0"
             disabled={isSubmitting}
             onClick={onClearChat}
             type="button"
@@ -43,7 +43,7 @@ function WorkerHeader({
             New chat
           </button>
           <button
-            className="flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm hover:bg-slate-100"
+            className="flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm transition hover:bg-slate-100 active:translate-y-px"
             onClick={onLogout}
             type="button"
           >
