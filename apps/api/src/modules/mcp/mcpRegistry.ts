@@ -117,7 +117,7 @@ const sanitizeServer = (
     endpoint: server.endpoint?.trim() || undefined,
     command: server.command?.trim() || undefined,
     args: server.args?.filter(Boolean),
-    headers: server.headers,
+    headers: server.headers && Object.keys(server.headers).length ? server.headers : undefined,
     description: server.description?.trim() || undefined
   };
 };

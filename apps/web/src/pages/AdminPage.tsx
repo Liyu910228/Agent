@@ -52,6 +52,7 @@ function AdminPage({ user, status, onLogout }: AdminPageProps) {
     description: "",
     enabled: true,
     endpoint: "",
+    headersText: "",
     name: "",
     transport: "stdio"
   });
@@ -66,6 +67,11 @@ function AdminPage({ user, status, onLogout }: AdminPageProps) {
   const [runTotal, setRunTotal] = useState(0);
   const [runTotalPages, setRunTotalPages] = useState(1);
   const [runStats, setRunStats] = useState<RunStats | null>(null);
+  const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
+  const [skillDraft, setSkillDraft] = useState({
+    description: "",
+    name: ""
+  });
   const [skills, setSkills] = useState<SkillConfig[]>([]);
 
   const refreshRuns = (page = runPage) => {
@@ -158,11 +164,16 @@ function AdminPage({ user, status, onLogout }: AdminPageProps) {
     setConfigError("");
 
     try {
+      const headers = mcpServerDraft.headersText.trim()
+        ? (JSON.parse(mcpServerDraft.headersText) as Record<string, string>)
+        : undefined;
       const response = await apiClient.saveMcpServer({
+        id: mcpServerDraft.id,
         command: mcpServerDraft.command,
         description: mcpServerDraft.description,
         enabled: mcpServerDraft.enabled,
         endpoint: mcpServerDraft.endpoint,
+        headers,
         name: mcpServerDraft.name,
         transport: mcpServerDraft.transport,
         args: mcpServerDraft.argsText
@@ -170,16 +181,63 @@ function AdminPage({ user, status, onLogout }: AdminPageProps) {
           .map((item) => item.trim())
           .filter(Boolean)
       });
-      setMcpServers((current) => [...current, response.server]);
+      setMcpServers((current) => {
+        const exists = current.some((server) => server.id === response.server.id);
+        return exists
+          ? current.map((server) =>
+              server.id === response.server.id ? response.server : server
+            )
+          : [...current, response.server];
+      });
       setMcpServerDraft({
         argsText: "",
         command: "",
         description: "",
         enabled: true,
         endpoint: "",
+        headersText: "",
         name: "",
         transport: "stdio"
       });
+    } catch (nextError) {
+      setConfigError(nextError instanceof Error ? nextError.message : "保存失败");
+    }
+  };
+
+  const editMcpServer = (server: McpServerConfig) => {
+    setMcpServerDraft({
+      argsText: server.args?.join(" ") ?? "",
+      command: server.command ?? "",
+      description: server.description ?? "",
+      enabled: server.enabled,
+      endpoint: server.endpoint ?? "",
+      headersText: server.headers ? JSON.stringify(server.headers, null, 2) : "",
+      id: server.id,
+      name: server.name,
+      transport: server.transport
+    });
+  };
+
+  const toggleMcpServer = async (server: McpServerConfig) => {
+    setConfigError("");
+
+    try {
+      const response = await apiClient.saveMcpServer({
+        args: server.args,
+        command: server.command,
+        description: server.description,
+        enabled: !server.enabled,
+        endpoint: server.endpoint,
+        headers: server.headers,
+        id: server.id,
+        name: server.name,
+        transport: server.transport
+      });
+      setMcpServers((current) =>
+        current.map((item) =>
+          item.id === response.server.id ? response.server : item
+        )
+      );
     } catch (nextError) {
       setConfigError(nextError instanceof Error ? nextError.message : "保存失败");
     }
@@ -231,6 +289,28 @@ function AdminPage({ user, status, onLogout }: AdminPageProps) {
     }
   };
 
+  const editSkill = (skill: SkillConfig) => {
+    setEditingSkillId(skill.id);
+    setSkillDraft({
+      description: skill.description,
+      name: skill.name
+    });
+  };
+
+  const saveSkill = async (id: string) => {
+    setConfigError("");
+
+    try {
+      const response = await apiClient.updateSkill(id, skillDraft);
+      setSkills((current) =>
+        current.map((item) => (item.id === id ? response.skill : item))
+      );
+      setEditingSkillId(null);
+    } catch (nextError) {
+      setConfigError(nextError instanceof Error ? nextError.message : "保存失败");
+    }
+  };
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950">
       <AdminHeader onLogout={onLogout} status={status} user={user} />
@@ -249,18 +329,25 @@ function AdminPage({ user, status, onLogout }: AdminPageProps) {
             onSave={saveAgent}
           />
           <CapabilitiesSection
+            editingSkillId={editingSkillId}
             mcpServerDraft={mcpServerDraft}
             mcpServers={mcpServers}
             mcpServerTests={mcpServerTests}
             mcpJsonConfig={mcpJsonConfig}
             mcpTools={mcpTools}
             onDraftChange={setMcpServerDraft}
+            onEditMcpServer={editMcpServer}
+            onEditSkill={editSkill}
             onImportMcpJson={importMcpJson}
             onJsonConfigChange={setMcpJsonConfig}
             onSaveMcpServer={saveMcpServer}
+            onSaveSkill={saveSkill}
+            onSkillDraftChange={setSkillDraft}
             onTestMcpServer={testMcpServer}
+            onToggleMcpServer={toggleMcpServer}
             onToggleMcpTool={toggleMcpTool}
             onToggleSkill={toggleSkill}
+            skillDraft={skillDraft}
             skills={skills}
             testingMcpServerId={testingMcpServerId}
           />

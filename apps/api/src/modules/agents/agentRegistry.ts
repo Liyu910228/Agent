@@ -48,6 +48,14 @@ const defaultAgents: AgentConfig[] = [
     modelStrategy: "auto"
   },
   {
+    id: "feedback",
+    name: "Feedback Agent",
+    role: "当用户问题缺少必要条件时，提示用户如何补充提问",
+    prompt:
+      "识别用户问题缺失的关键信息，用简短友好的中文告诉用户需要补充什么，并给出一到两个可直接照抄的提问示例。",
+    modelStrategy: "auto"
+  },
+  {
     id: "reviewer",
     name: "Reviewer Agent",
     role: "审核并整理最终答案",

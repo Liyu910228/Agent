@@ -87,10 +87,21 @@ export const apiClient = {
       body: JSON.stringify(patch)
     }),
   listSkills: () => request<SkillsResponse>("/api/skills"),
-  updateSkill: (id: string, enabled: boolean) =>
+  updateSkill: (
+    id: string,
+    patch:
+      | boolean
+      | {
+          description?: string;
+          enabled?: boolean;
+          name?: string;
+        }
+  ) =>
     request<SkillResponse>(`/api/skills/${encodeURIComponent(id)}`, {
       method: "PATCH",
-      body: JSON.stringify({ enabled })
+      body: JSON.stringify(
+        typeof patch === "boolean" ? { enabled: patch } : patch
+      )
     }),
   listMcpTools: () => request<McpToolsResponse>("/api/mcp/tools"),
   updateMcpTool: (id: string, enabled: boolean) =>

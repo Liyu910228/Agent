@@ -6,6 +6,7 @@ import type {
   SkillConfig
 } from "../../types";
 import SkillPanel from "./SkillPanel";
+import type { SkillDraft } from "./SkillPanel";
 
 export interface McpServerDraft {
   argsText: string;
@@ -13,6 +14,7 @@ export interface McpServerDraft {
   description: string;
   enabled: boolean;
   endpoint: string;
+  headersText: string;
   id?: string;
   name: string;
   transport: "stdio" | "http" | "sse" | "streamableHttp";
@@ -26,11 +28,18 @@ interface CapabilitiesSectionProps {
   mcpJsonConfig: string;
   testingMcpServerId: string | null;
   skills: SkillConfig[];
+  editingSkillId: string | null;
+  skillDraft: SkillDraft;
   onDraftChange: (draft: McpServerDraft) => void;
+  onEditMcpServer: (server: McpServerConfig) => void;
+  onEditSkill: (skill: SkillConfig) => void;
   onJsonConfigChange: (config: string) => void;
   onImportMcpJson: () => void;
   onSaveMcpServer: () => void;
+  onSaveSkill: (id: string) => void;
+  onSkillDraftChange: (draft: SkillDraft) => void;
   onTestMcpServer: (server: McpServerConfig) => void;
+  onToggleMcpServer: (server: McpServerConfig) => void;
   onToggleMcpTool: (tool: McpToolConfig) => void;
   onToggleSkill: (skill: SkillConfig) => void;
 }
@@ -41,12 +50,19 @@ function CapabilitiesSection({
   mcpServerDraft,
   mcpServerTests,
   mcpJsonConfig,
+  editingSkillId,
   onDraftChange,
+  onEditMcpServer,
+  onEditSkill,
   onImportMcpJson,
   onJsonConfigChange,
   onSaveMcpServer,
+  onSaveSkill,
+  onSkillDraftChange,
   onTestMcpServer,
+  onToggleMcpServer,
   skills,
+  skillDraft,
   testingMcpServerId,
   onToggleMcpTool,
   onToggleSkill
@@ -57,7 +73,15 @@ function CapabilitiesSection({
 
   return (
     <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
-      <SkillPanel onToggleSkill={onToggleSkill} skills={skills} />
+      <SkillPanel
+        editingSkillId={editingSkillId}
+        onEditSkill={onEditSkill}
+        onSaveSkill={onSaveSkill}
+        onSkillDraftChange={onSkillDraftChange}
+        onToggleSkill={onToggleSkill}
+        skillDraft={skillDraft}
+        skills={skills}
+      />
 
       <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
@@ -71,7 +95,7 @@ function CapabilitiesSection({
             type="button"
           >
             <Save size={14} />
-            保存 Server
+            {mcpServerDraft.id ? "保存修改" : "保存 Server"}
           </button>
         </div>
 
@@ -157,6 +181,30 @@ function CapabilitiesSection({
               placeholder="用途说明"
               value={mcpServerDraft.description}
             />
+            <textarea
+              className="rounded-md border border-slate-300 px-3 py-2 font-mono text-xs md:col-span-2"
+              onChange={(event) =>
+                onDraftChange({
+                  ...mcpServerDraft,
+                  headersText: event.target.value
+                })
+              }
+              placeholder='Headers JSON，例如 {"Authorization":"Bearer ..."}'
+              value={mcpServerDraft.headersText}
+            />
+            <label className="flex items-center gap-2 text-xs text-slate-600">
+              <input
+                checked={mcpServerDraft.enabled}
+                onChange={(event) =>
+                  onDraftChange({
+                    ...mcpServerDraft,
+                    enabled: event.target.checked
+                  })
+                }
+                type="checkbox"
+              />
+              启用这个 MCP Server
+            </label>
           </div>
         </div>
 
@@ -197,8 +245,26 @@ function CapabilitiesSection({
                         : "rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500"
                     }
                   >
-                    {server.enabled ? "已配置" : "已禁用"}
+                    {server.enabled ? "已启用" : "已禁用"}
                   </span>
+                  <button
+                    className={
+                      server.enabled
+                        ? "rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700"
+                        : "rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500"
+                    }
+                    onClick={() => onToggleMcpServer(server)}
+                    type="button"
+                  >
+                    {server.enabled ? "禁用" : "启用"}
+                  </button>
+                  <button
+                    className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                    onClick={() => onEditMcpServer(server)}
+                    type="button"
+                  >
+                    编辑
+                  </button>
                   <button
                     className="flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:cursor-wait disabled:text-slate-400"
                     disabled={testingMcpServerId === server.id}
@@ -259,7 +325,7 @@ function CapabilitiesSection({
                   onClick={() => onToggleMcpTool(tool)}
                   type="button"
                 >
-                  {tool.enabled ? "启用" : "禁用"}
+                  {tool.enabled ? "禁用" : "启用"}
                 </button>
               </div>
               <p className="mt-1 line-clamp-2 text-slate-500">{tool.description}</p>

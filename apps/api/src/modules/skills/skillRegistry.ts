@@ -20,13 +20,26 @@ export interface SkillConfig {
 }
 
 const SKILL_SETTINGS_FILE = "skill-settings.json";
+const SKILL_OVERRIDES_FILE = "skill-overrides.json";
 
 const skillEnabledOverrides = new Map<string, boolean>(
   Object.entries(readJson<Record<string, boolean>>(SKILL_SETTINGS_FILE, {}))
 );
+const skillMetadataOverrides = new Map<
+  string,
+  Partial<Pick<SkillConfig, "description" | "name">>
+>(
+  Object.entries(
+    readJson<Record<string, Partial<Pick<SkillConfig, "description" | "name">>>>(
+      SKILL_OVERRIDES_FILE,
+      {}
+    )
+  )
+);
 
 const withEnabled = (skill: Omit<SkillConfig, "enabled">): SkillConfig => ({
   ...skill,
+  ...skillMetadataOverrides.get(skill.id),
   enabled: skillEnabledOverrides.get(skill.id) ?? true
 });
 
@@ -174,6 +187,7 @@ export const listSkills = () => {
     knownIds.add(skill.id);
     merged.push({
       ...skill,
+      ...skillMetadataOverrides.get(skill.id),
       enabled: skillEnabledOverrides.get(skill.id) ?? skill.enabled
     });
   }
@@ -192,6 +206,41 @@ export const setSkillEnabled = (skillId: string, enabled: boolean) => {
 
   skillEnabledOverrides.set(skillId, enabled);
   writeJson(SKILL_SETTINGS_FILE, Object.fromEntries(skillEnabledOverrides));
+  return listSkills().find((item) => item.id === skillId) ?? null;
+};
+
+export const updateSkill = (
+  skillId: string,
+  patch: Partial<Pick<SkillConfig, "description" | "enabled" | "name">>
+) => {
+  const skill = listSkills().find((item) => item.id === skillId);
+
+  if (!skill) {
+    return null;
+  }
+
+  if (typeof patch.enabled === "boolean") {
+    skillEnabledOverrides.set(skillId, patch.enabled);
+    writeJson(SKILL_SETTINGS_FILE, Object.fromEntries(skillEnabledOverrides));
+  }
+
+  const metadata = {
+    ...skillMetadataOverrides.get(skillId)
+  };
+
+  if (typeof patch.name === "string") {
+    metadata.name = patch.name.trim() || skill.name;
+  }
+
+  if (typeof patch.description === "string") {
+    metadata.description = patch.description.trim() || skill.description;
+  }
+
+  if (metadata.name || metadata.description) {
+    skillMetadataOverrides.set(skillId, metadata);
+    writeJson(SKILL_OVERRIDES_FILE, Object.fromEntries(skillMetadataOverrides));
+  }
+
   return listSkills().find((item) => item.id === skillId) ?? null;
 };
 

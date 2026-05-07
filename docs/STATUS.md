@@ -108,6 +108,8 @@ Vibe Coding 步骤 12/13：小步迭代与模块边界维护。
 | 业务端多会话主题 | 通过 | 业务员页面新增左侧 chat 列表和主题设置，每个 chat 独立保存背景主题并持久化到 localStorage；check 通过 |
 | 业务端图片上传与 VL 处理 | 通过 | 图片附件进入 Vision Agent，使用 LLM_VISION_MODEL=qwen3-vl-plus 调用视觉模型；20x20 测试图片识别通过 |
 | 业务端语音输入 | 通过 | 输入框新增麦克风按钮，基于浏览器 Web Speech API 进行中文听写，识别结果自动填入当前问题；check 通过 |
+| Feedback Agent 错误反馈 | 通过 | 新增 Feedback Agent；不前置拦截用户问题，工具/MCP 执行后若失败则反馈具体报错原因，参数类错误再提示用户如何补充提问 |
+| 管理员能力配置编辑 | 通过 | 管理员页面支持 Skill 启用/禁用和名称/描述编辑；支持 MCP Server 新增、编辑、启用/禁用、headers 配置和测试；MCP Tool 支持启用/禁用 |
 
 ## 风险与备注
 

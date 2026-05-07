@@ -4,6 +4,7 @@ import {
   invokeMcpServer,
   selectMcpServersForQuestion
 } from "../mcp/mcpInvoker.js";
+import { lookupWeatherCity } from "../mcp/cityKnowledgeBase.js";
 import { findMcpServer, runMcpTool } from "../mcp/mcpRegistry.js";
 import { createChatCompletion } from "../models/modelClient.js";
 import {
@@ -327,6 +328,212 @@ const createVisionStep = async (
   }
 };
 
+const createFeedbackStep = async (
+  question: string,
+  failureContext: string,
+  fallbackOutput: string,
+  model: { modelId: string; reason: string },
+  retryModels: Array<{ modelId: string; reason: string }> = []
+) => {
+  const step = await createAgentStep(
+    "Feedback Agent",
+    agentPrompt(
+      "feedback",
+      "你是反馈 Agent。请根据实际报错告诉用户失败原因，并给出可直接照抄的正确提问示例。"
+    ),
+    `用户问题：${question}\n实际失败信息：${failureContext}\n请说明失败原因，并提示用户下次如何输入可以避免这个错误。`,
+    fallbackOutput,
+    model,
+    retryModels
+  );
+
+  return step.status === "success" ? step : { ...step, status: "success" as const };
+};
+
+const createFeedbackRun = async ({
+  attachments,
+  fallbackOutput,
+  failureContext,
+  participatingAgents,
+  question,
+  questionType,
+  runStartedAt,
+  selectedModelIds,
+  steps,
+  usedMcpTools,
+  usedModels,
+  usedSkills
+}: {
+  attachments: RunAttachment[];
+  fallbackOutput: string;
+  failureContext: string;
+  participatingAgents: string[];
+  question: string;
+  questionType: ReturnType<typeof classifyQuestion>;
+  runStartedAt: number;
+  selectedModelIds: Set<string>;
+  steps: RunStep[];
+  usedMcpTools: string[];
+  usedModels: Set<string>;
+  usedSkills: string[];
+}) => {
+  rememberUnique(participatingAgents, "Feedback Agent");
+  const feedbackModel = selectAgentModel(
+    "feedback",
+    "general",
+    questionType,
+    selectedModelIds
+  );
+  const feedbackStep = await createFeedbackStep(
+    question,
+    failureContext,
+    fallbackOutput,
+    { modelId: feedbackModel.modelId, reason: feedbackModel.reason },
+    selectRetryModels("general", questionType, selectedModelIds, feedbackModel.modelId)
+  );
+
+  steps.push(feedbackStep);
+  rememberStepModel(feedbackStep, selectedModelIds, usedModels);
+
+  const run: RunRecord = {
+    id: `run-${randomUUID()}`,
+    question,
+    questionType,
+    finalAnswer: stripReviewerMeta(feedbackStep.output),
+    status: "success",
+    createdAt: new Date(runStartedAt).toISOString(),
+    completedAt: new Date().toISOString(),
+    durationMs: Math.max(1, Date.now() - runStartedAt),
+    participatingAgents,
+    usedSkills,
+    usedMcpTools,
+    usedModels: Array.from(usedModels),
+    attachments: attachments.map((attachment) => ({
+      id: attachment.id,
+      name: attachment.name,
+      mimeType: attachment.mimeType,
+      size: attachment.size,
+      kind: attachment.kind
+    })),
+    steps
+  };
+
+  return saveRun(run);
+};
+
+const createStaticFeedbackRun = ({
+  attachments,
+  finalAnswer,
+  participatingAgents,
+  question,
+  questionType,
+  runStartedAt,
+  steps,
+  usedMcpTools,
+  usedModels,
+  usedSkills
+}: {
+  attachments: RunAttachment[];
+  finalAnswer: string;
+  participatingAgents: string[];
+  question: string;
+  questionType: ReturnType<typeof classifyQuestion>;
+  runStartedAt: number;
+  steps: RunStep[];
+  usedMcpTools: string[];
+  usedModels: Set<string>;
+  usedSkills: string[];
+}) => {
+  const feedbackStartedAt = now();
+  rememberUnique(participatingAgents, "Feedback Agent");
+  steps.push(
+    createStep("agent", "Feedback Agent", finalAnswer, feedbackStartedAt, undefined)
+  );
+
+  const run: RunRecord = {
+    id: `run-${randomUUID()}`,
+    question,
+    questionType,
+    finalAnswer,
+    status: "success",
+    createdAt: new Date(runStartedAt).toISOString(),
+    completedAt: new Date().toISOString(),
+    durationMs: Math.max(1, Date.now() - runStartedAt),
+    participatingAgents,
+    usedSkills,
+    usedMcpTools,
+    usedModels: Array.from(usedModels),
+    attachments: attachments.map((attachment) => ({
+      id: attachment.id,
+      name: attachment.name,
+      mimeType: attachment.mimeType,
+      size: attachment.size,
+      kind: attachment.kind
+    })),
+    steps
+  };
+
+  return saveRun(run);
+};
+
+const summarizeFailedSteps = (steps: RunStep[]) =>
+  steps
+    .filter((step) => step.status === "failed")
+    .map((step) => `${step.type}/${step.name}: ${step.error ?? step.output}`)
+    .join("\n");
+
+const includesAnyText = (value: string, keywords: string[]) =>
+  keywords.some((keyword) => value.toLowerCase().includes(keyword.toLowerCase()));
+
+const weatherKeywords = ["天气", "气温", "温度", "下雨", "降雨", "weather", "forecast"];
+
+const isWeatherQuestion = (question: string) => includesAnyText(question, weatherKeywords);
+
+const needsWeatherCityFromUser = (question: string) =>
+  isWeatherQuestion(question) && !lookupWeatherCity(question);
+
+const isWeatherFailure = (question: string, failureContext: string) =>
+  isWeatherQuestion(question) &&
+  includesAnyText(failureContext, [
+    "天气",
+    "weather",
+    "city",
+    "cityId",
+    "城市",
+    "区县",
+    "location",
+    "参数"
+  ]);
+
+const isTechnicalToolFailure = (failureContext: string) =>
+  includesAnyText(failureContext, [
+    "tools/list",
+    "HTTP",
+    "返回 400",
+    "返回 401",
+    "返回 403",
+    "返回 404",
+    "返回 500",
+    "空响应",
+    "无法解析",
+    "endpoint",
+    "headers",
+    "disabled",
+    "not found"
+  ]);
+
+const createTechnicalFailureAnswer = (failureContext: string) =>
+  `这次不是你提问方式的问题，是工具服务调用失败。\n\n具体原因：\n${failureContext}\n\n可以先重试一次；如果仍然失败，需要管理员检查 MCP Server 的 endpoint、headers/token 或服务响应格式。`;
+
+const weatherMissingCityAnswer =
+  "我刚才尝试查询天气，但问题里缺少城市或区县，天气工具不知道要查哪里。\n\n你可以这样问：\n- 成都天气怎么样？\n- 今天深圳天气怎么样？\n- 明天北京朝阳区会下雨吗？";
+
+const weatherFailureFallback =
+  "天气查询失败了，原因通常是缺少城市或区县，天气 MCP 无法确定要查哪里。请补充具体地点后再问，例如：\n\n- 今天深圳天气怎么样？\n- 明天北京朝阳区会下雨吗？";
+
+const genericToolFailureFallback =
+  "这次工具调用失败了。请根据报错补充必要信息后再试，例如提供城市、订单号、客户编号、时间范围或其他工具需要的参数。";
+
 const stripReviewerMeta = (value: string) => {
   const markers = [
     "最终推荐答案",
@@ -560,6 +767,62 @@ export const processQuestion = async (
     );
     steps.push(toolStep);
     rememberStepModel(toolStep, selectedModelIds, usedModels);
+
+    const failedMcpContext = summarizeFailedSteps(
+      steps.filter((step) => step.type === "mcp")
+    );
+    const hasSuccessfulMcpResult = steps.some(
+      (step) => step.type === "mcp" && step.status === "success"
+    );
+
+    if (failedMcpContext && !hasSuccessfulMcpResult) {
+      if (needsWeatherCityFromUser(enrichedQuestion)) {
+        return createStaticFeedbackRun({
+          attachments,
+          finalAnswer: weatherMissingCityAnswer,
+          participatingAgents,
+          question,
+          questionType,
+          runStartedAt,
+          steps,
+          usedMcpTools,
+          usedModels,
+          usedSkills
+        });
+      }
+
+      if (isTechnicalToolFailure(failedMcpContext)) {
+        return createStaticFeedbackRun({
+          attachments,
+          finalAnswer: createTechnicalFailureAnswer(failedMcpContext),
+          participatingAgents,
+          question,
+          questionType,
+          runStartedAt,
+          steps,
+          usedMcpTools,
+          usedModels,
+          usedSkills
+        });
+      }
+
+      return createFeedbackRun({
+        attachments,
+        fallbackOutput: isWeatherFailure(enrichedQuestion, failedMcpContext)
+          ? weatherFailureFallback
+          : genericToolFailureFallback,
+        failureContext: failedMcpContext,
+        participatingAgents,
+        question,
+        questionType,
+        runStartedAt,
+        selectedModelIds,
+        steps,
+        usedMcpTools,
+        usedModels,
+        usedSkills
+      });
+    }
   } else if (questionType === "research") {
     participatingAgents.push("Research Agent", "Reviewer Agent");
     const researchModel = selectAgentModel(
