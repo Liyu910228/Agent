@@ -11,6 +11,7 @@ import type {
   McpToolResponse,
   McpToolsResponse,
   ModelListState,
+  RunAttachment,
   RunResponse,
   RunStatsResponse,
   RunsResponse,
@@ -56,11 +57,12 @@ export const apiClient = {
       mcpServerIds?: string[];
       mcpToolIds?: string[];
       skillIds?: string[];
-    }
+    },
+    attachments?: RunAttachment[]
   ) =>
     request<RunResponse>("/api/runs", {
       method: "POST",
-      body: JSON.stringify({ directives, question })
+      body: JSON.stringify({ attachments, directives, question })
     }),
   listRuns: (page = 1, pageSize = 10) =>
     request<RunsResponse>(`/api/runs?page=${page}&pageSize=${pageSize}`),

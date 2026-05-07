@@ -20,9 +20,23 @@ interface OpenAiModelsResponse {
   data?: OpenAiModel[];
 }
 
+interface TextContentPart {
+  text: string;
+  type: "text";
+}
+
+interface ImageContentPart {
+  image_url: {
+    url: string;
+  };
+  type: "image_url";
+}
+
+type ChatMessageContent = string | Array<TextContentPart | ImageContentPart>;
+
 interface ChatMessage {
   role: "system" | "user" | "assistant";
-  content: string;
+  content: ChatMessageContent;
 }
 
 interface ChatCompletionResponse {
@@ -52,6 +66,10 @@ const tagModel = (id: string) => {
 
   if (["tool", "function"].some((item) => value.includes(item))) {
     tags.add("工具调用");
+  }
+
+  if (["vl", "vision", "visual", "omni", "qvq"].some((item) => value.includes(item))) {
+    tags.add("视觉理解");
   }
 
   if (["long", "128k", "200k", "1m"].some((item) => value.includes(item))) {
@@ -164,7 +182,10 @@ export const createChatCompletion = async (
   });
 
   if (!response.ok) {
-    const message = `模型调用失败：HTTP ${response.status}`;
+    const details = await response.text();
+    const message = `模型调用失败：HTTP ${response.status}${
+      details ? `，${details.slice(0, 500)}` : ""
+    }`;
     recordModelFailure(model, message);
     throw new Error(message);
   }

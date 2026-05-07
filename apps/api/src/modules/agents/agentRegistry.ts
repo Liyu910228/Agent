@@ -53,6 +53,15 @@ const defaultAgents: AgentConfig[] = [
     role: "审核并整理最终答案",
     prompt: "检查答案完整性、准确性和可读性。",
     modelStrategy: "auto"
+  },
+  {
+    id: "vision",
+    name: "Vision Agent",
+    role: "处理上传图片和视觉理解问题",
+    prompt:
+      "结合用户上传的图片和问题进行视觉理解，优先分析画面内容、文字、主体、颜色、场景和用户指定的细节。",
+    modelStrategy: "fixed",
+    fixedModelId: "qwen3-vl-plus"
   }
 ];
 
@@ -61,9 +70,26 @@ const normalizeAgent = (agent: AgentConfig): AgentConfig => ({
   modelStrategy: agent.modelStrategy ?? "auto"
 });
 
-export const agents: AgentConfig[] = readJson<AgentConfig[]>(
-  AGENTS_FILE,
-  defaultAgents
+const mergeDefaultAgents = (storedAgents: AgentConfig[]) => {
+  const mergedAgents = [...storedAgents];
+  let changed = false;
+
+  for (const defaultAgent of defaultAgents) {
+    if (!mergedAgents.some((agent) => agent.id === defaultAgent.id)) {
+      mergedAgents.push(defaultAgent);
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    writeJson(AGENTS_FILE, mergedAgents);
+  }
+
+  return mergedAgents;
+};
+
+export const agents: AgentConfig[] = mergeDefaultAgents(
+  readJson<AgentConfig[]>(AGENTS_FILE, defaultAgents)
 ).map(normalizeAgent);
 
 export const getAgentById = (id: string) => agents.find((agent) => agent.id === id);

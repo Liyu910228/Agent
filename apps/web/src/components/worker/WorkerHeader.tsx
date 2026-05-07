@@ -2,6 +2,7 @@ import { Bot, LogOut, Plus } from "lucide-react";
 import type { BootstrapStatus, SessionUser } from "../../types";
 
 interface WorkerHeaderProps {
+  accentColor: string;
   isSubmitting: boolean;
   onClearChat: () => void;
   onLogout: () => void;
@@ -10,6 +11,7 @@ interface WorkerHeaderProps {
 }
 
 function WorkerHeader({
+  accentColor,
   isSubmitting,
   onClearChat,
   onLogout,
@@ -17,7 +19,7 @@ function WorkerHeader({
   user
 }: WorkerHeaderProps) {
   return (
-    <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <header className="z-20 shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-slate-900 text-white">
@@ -37,7 +39,7 @@ function WorkerHeader({
             onClick={onClearChat}
             type="button"
           >
-            <Plus size={16} />
+            <Plus size={16} style={{ color: accentColor }} />
             New chat
           </button>
           <button

@@ -102,6 +102,46 @@ export const selectDefaultModel = (): ModelSelection | null => {
   };
 };
 
+export const selectVisionModel = (
+  excludedModelIds: Set<string> = new Set()
+): ModelSelection => {
+  if (env.llmVisionModel) {
+    return {
+      modelId: env.llmVisionModel,
+      reason: "使用 LLM_VISION_MODEL 指定的视觉理解模型处理图片附件。",
+      fallback: false
+    };
+  }
+
+  const { models } = getModelStore();
+  const match = models.find((model) => {
+    const id = model.id.toLowerCase();
+
+    return (
+      model.healthStatus !== "disabled" &&
+      !excludedModelIds.has(model.id) &&
+      (model.capabilityTags.includes("视觉理解") ||
+        ["vl", "vision", "visual", "omni", "qvq"].some((keyword) =>
+          id.includes(keyword)
+        ))
+    );
+  });
+
+  if (match) {
+    return {
+      modelId: match.id,
+      reason: "根据模型名称中的视觉能力关键词自动选择 VL 模型。",
+      fallback: false
+    };
+  }
+
+  return {
+    modelId: "",
+    reason: "未配置 LLM_VISION_MODEL，也未从模型列表中发现 VL/vision/omni/qvq 模型。",
+    fallback: true
+  };
+};
+
 const selectFallbackModel = (excludedModelIds: Set<string>): ModelSelection => {
   const { models } = getModelStore();
   const unusedGeneral = models.find(

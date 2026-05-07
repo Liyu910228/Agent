@@ -1,27 +1,23 @@
-import {
-  Bot,
-  Command,
-  SendHorizonal,
-  UserRound
-} from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { apiClient } from "../api/client";
-import { MessageContent } from "../components/worker/MessageContent";
-import {
-  SelectedCommandChips,
-  SlashCommandMenu,
-  type SlashSelection
-} from "../components/worker/SlashCommandMenu";
+import WorkerChatPanel, {
+  type ChatMessage
+} from "../components/worker/WorkerChatPanel";
+import WorkerComposer from "../components/worker/WorkerComposer";
+import type { SlashSelection } from "../components/worker/SlashCommandMenu";
 import WorkerHeader from "../components/worker/WorkerHeader";
+import WorkerSidebar, {
+  type WorkerChatTheme
+} from "../components/worker/WorkerSidebar";
 import type {
   BootstrapStatus,
   McpServerConfig,
   McpToolConfig,
+  RunAttachment,
   SessionUser,
   SkillConfig
 } from "../types";
-import { formatDateTime } from "../utils/time";
 
 interface WorkerPageProps {
   user: SessionUser;
@@ -29,15 +25,106 @@ interface WorkerPageProps {
   onLogout: () => void;
 }
 
-interface ChatMessage {
+interface ChatThread {
   id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: string;
+  messages: ChatMessage[];
+  themeId: string;
+  title: string;
+  updatedAt: string;
 }
 
+const chatThemes: WorkerChatTheme[] = [
+  {
+    accent: "#0f172a",
+    background: "#ffffff",
+    id: "clean",
+    name: "默认",
+    panel: "#f8fafc",
+    userBubble: "#f1f5f9"
+  },
+  {
+    accent: "#047857",
+    background: "#f0fdf4",
+    id: "green",
+    name: "绿意",
+    panel: "#ecfdf5",
+    userBubble: "#d1fae5"
+  },
+  {
+    accent: "#2563eb",
+    background: "#eff6ff",
+    id: "blue",
+    name: "蓝调",
+    panel: "#dbeafe",
+    userBubble: "#bfdbfe"
+  },
+  {
+    accent: "#be123c",
+    background: "#fff1f2",
+    id: "rose",
+    name: "玫瑰",
+    panel: "#ffe4e6",
+    userBubble: "#fecdd3"
+  }
+];
+
+const WORKER_CHATS_KEY = "agent-platform-worker-chats";
+const WORKER_ACTIVE_CHAT_KEY = "agent-platform-worker-active-chat";
+const MAX_UPLOAD_FILES = 4;
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+
+const createChatThread = (themeId = "clean"): ChatThread => {
+  const now = new Date().toISOString();
+
+  return {
+    id: `chat-${Date.now()}`,
+    messages: [],
+    themeId,
+    title: "New chat",
+    updatedAt: now
+  };
+};
+
+const readChatThreads = () => {
+  const raw = window.localStorage.getItem(WORKER_CHATS_KEY);
+
+  if (!raw) {
+    return [createChatThread()];
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as ChatThread[];
+    return parsed.length ? parsed : [createChatThread()];
+  } catch {
+    window.localStorage.removeItem(WORKER_CHATS_KEY);
+    return [createChatThread()];
+  }
+};
+
+const readFileAsDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result)));
+    reader.addEventListener("error", () => reject(reader.error));
+    reader.readAsDataURL(file);
+  });
+
+const readTextIfPossible = async (file: File) => {
+  const isTextLike =
+    file.type.startsWith("text/") ||
+    [".txt", ".md", ".csv", ".json"].some((suffix) =>
+      file.name.toLowerCase().endsWith(suffix)
+    );
+
+  return isTextLike ? file.text() : undefined;
+};
+
 function WorkerPage({ user, status, onLogout }: WorkerPageProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chats, setChats] = useState<ChatThread[]>(() => readChatThreads());
+  const [activeChatId, setActiveChatId] = useState(() => {
+    const storedChatId = window.localStorage.getItem(WORKER_ACTIVE_CHAT_KEY);
+    return storedChatId || chats[0].id;
+  });
   const [question, setQuestion] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -45,7 +132,23 @@ function WorkerPage({ user, status, onLogout }: WorkerPageProps) {
   const [mcpTools, setMcpTools] = useState<McpToolConfig[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
   const [selectedCommands, setSelectedCommands] = useState<SlashSelection[]>([]);
+  const [attachments, setAttachments] = useState<RunAttachment[]>([]);
   const [commandError, setCommandError] = useState("");
+  const activeChat = chats.find((chat) => chat.id === activeChatId) ?? chats[0];
+  const activeTheme =
+    chatThemes.find((theme) => theme.id === activeChat.themeId) ?? chatThemes[0];
+  const messages = activeChat.messages;
+
+  useEffect(() => {
+    if (!chats.some((chat) => chat.id === activeChatId)) {
+      setActiveChatId(chats[0].id);
+    }
+  }, [activeChatId, chats]);
+
+  useEffect(() => {
+    window.localStorage.setItem(WORKER_CHATS_KEY, JSON.stringify(chats));
+    window.localStorage.setItem(WORKER_ACTIVE_CHAT_KEY, activeChat.id);
+  }, [activeChat.id, chats]);
 
   useEffect(() => {
     void Promise.all([
@@ -111,10 +214,33 @@ function WorkerPage({ user, status, onLogout }: WorkerPageProps) {
   }, [mcpServers, mcpTools, selectedCommands, skills, slashQuery]);
 
   const clearChat = () => {
-    setMessages([]);
+    const nextChat = createChatThread(activeTheme.id);
+
+    setChats((current) => [nextChat, ...current]);
+    setActiveChatId(nextChat.id);
     setQuestion("");
     setError("");
     setSelectedCommands([]);
+    setAttachments([]);
+  };
+
+  const updateActiveChat = (updater: (chat: ChatThread) => ChatThread) => {
+    setChats((current) =>
+      current.map((chat) => (chat.id === activeChatId ? updater(chat) : chat))
+    );
+  };
+
+  const updateChat = (
+    chatId: string,
+    updater: (chat: ChatThread) => ChatThread
+  ) => {
+    setChats((current) =>
+      current.map((chat) => (chat.id === chatId ? updater(chat) : chat))
+    );
+  };
+
+  const setActiveChatTheme = (themeId: string) => {
+    updateActiveChat((chat) => ({ ...chat, themeId }));
   };
 
   const removeTrailingSlashCommand = (value: string) =>
@@ -131,46 +257,107 @@ function WorkerPage({ user, status, onLogout }: WorkerPageProps) {
     );
   };
 
-  const handleSubmit = async () => {
-    const nextQuestion = question.trim();
+  const addFiles = async (files: FileList) => {
+    setError("");
+    const remainingSlots = MAX_UPLOAD_FILES - attachments.length;
+    const selectedFiles = Array.from(files).slice(0, remainingSlots);
 
-    if (!nextQuestion || isSubmitting) {
+    if (selectedFiles.length === 0) {
+      setError(`最多上传 ${MAX_UPLOAD_FILES} 个附件。`);
       return;
     }
 
+    try {
+      const nextAttachments = await Promise.all(
+        selectedFiles.map(async (file) => {
+          if (file.size > MAX_UPLOAD_BYTES) {
+            throw new Error(`${file.name} 超过 5MB，暂不支持上传。`);
+          }
+
+          const isImage = file.type.startsWith("image/");
+          const textContent = isImage ? undefined : await readTextIfPossible(file);
+
+          return {
+            id: `attachment-${Date.now()}-${file.name}`,
+            name: file.name,
+            mimeType: file.type || "application/octet-stream",
+            size: file.size,
+            kind: isImage ? "image" : "document",
+            dataUrl: isImage ? await readFileAsDataUrl(file) : undefined,
+            textContent
+          } satisfies RunAttachment;
+        })
+      );
+
+      setAttachments((current) => [...current, ...nextAttachments]);
+    } catch (fileError) {
+      setError(fileError instanceof Error ? fileError.message : "附件读取失败");
+    }
+  };
+
+  const removeAttachment = (attachmentId: string) => {
+    setAttachments((current) =>
+      current.filter((attachment) => attachment.id !== attachmentId)
+    );
+  };
+
+  const handleSubmit = async () => {
+    const rawQuestion = question.trim();
+
+    if ((!rawQuestion && attachments.length === 0) || isSubmitting) {
+      return;
+    }
+
+    const nextQuestion = rawQuestion || "请分析我上传的附件。";
+    const submittedAttachments = attachments;
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
       role: "user",
       content: nextQuestion,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      attachments: submittedAttachments
     };
+    const submittedChatId = activeChat.id;
 
-    setMessages((current) => [...current, userMessage]);
+    updateChat(submittedChatId, (chat) => ({
+      ...chat,
+      messages: [...chat.messages, userMessage],
+      title: chat.messages.length ? chat.title : nextQuestion.slice(0, 28),
+      updatedAt: userMessage.timestamp
+    }));
     setQuestion("");
     setError("");
+    setAttachments([]);
     setIsSubmitting(true);
 
     try {
-      const response = await apiClient.createRun(nextQuestion, {
-        mcpServerIds: selectedCommands
-          .filter((selection) => selection.kind === "mcpServer")
-          .map((selection) => selection.id),
-        mcpToolIds: selectedCommands
-          .filter((selection) => selection.kind === "mcpTool")
-          .map((selection) => selection.id),
-        skillIds: selectedCommands
-          .filter((selection) => selection.kind === "skill")
-          .map((selection) => selection.id)
-      });
-      setMessages((current) => [
-        ...current,
+      const response = await apiClient.createRun(
+        nextQuestion,
         {
-          id: response.run.id,
-          role: "assistant",
-          content: response.run.finalAnswer,
-          timestamp: response.run.completedAt
-        }
-      ]);
+          mcpServerIds: selectedCommands
+            .filter((selection) => selection.kind === "mcpServer")
+            .map((selection) => selection.id),
+          mcpToolIds: selectedCommands
+            .filter((selection) => selection.kind === "mcpTool")
+            .map((selection) => selection.id),
+          skillIds: selectedCommands
+            .filter((selection) => selection.kind === "skill")
+            .map((selection) => selection.id)
+        },
+        submittedAttachments
+      );
+      const assistantMessage: ChatMessage = {
+        id: response.run.id,
+        role: "assistant",
+        content: response.run.finalAnswer,
+        timestamp: response.run.completedAt
+      };
+
+      updateChat(submittedChatId, (chat) => ({
+        ...chat,
+        messages: [...chat.messages, assistantMessage],
+        updatedAt: assistantMessage.timestamp
+      }));
       setSelectedCommands([]);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "提交失败");
@@ -192,139 +379,67 @@ function WorkerPage({ user, status, onLogout }: WorkerPageProps) {
     }
   };
 
-  const renderAvatar = (role: ChatMessage["role"]) => (
-    <div
-      className={
-        role === "user"
-          ? "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-900 text-white"
-          : "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100"
-      }
-      title={role === "user" ? "业务员" : "AI"}
-    >
-      {role === "user" ? <UserRound size={16} /> : <Bot size={16} />}
-    </div>
-  );
-
   return (
-    <main className="flex min-h-screen flex-col bg-white text-slate-950">
-      <WorkerHeader
-        isSubmitting={isSubmitting}
-        onClearChat={clearChat}
-        onLogout={onLogout}
-        status={status}
-        user={user}
+    <main className="flex h-screen flex-col overflow-hidden bg-white text-slate-950 md:flex-row">
+      <WorkerSidebar
+        activeChatId={activeChat.id}
+        activeThemeId={activeChat.themeId}
+        chats={chats.map((chat) => ({
+          id: chat.id,
+          title: chat.title,
+          updatedAt: chat.updatedAt
+        }))}
+        onCreateChat={clearChat}
+        onSelectChat={setActiveChatId}
+        onThemeChange={setActiveChatTheme}
+        themes={chatThemes}
       />
 
-      <section className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-4">
-        <div className="flex-1 space-y-5 py-6">
-          {messages.length === 0 ? (
-            <div className="flex h-full min-h-96 items-center justify-center">
-              <div className="w-full max-w-2xl rounded-lg border border-slate-200 bg-slate-50 px-6 py-8 text-center">
-                <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-md bg-white text-slate-700 ring-1 ring-slate-200">
-                  <Command size={20} />
-                </span>
-                <h2 className="mt-4 text-2xl font-semibold tracking-tight">
-                  有什么可以帮你处理？
-                </h2>
-                <p className="mt-2 text-sm text-slate-500">
-                  直接输入用户问题，系统会自动调用 Agent、Skill 和 MCP。
-                </p>
-                <div className="mt-4 flex flex-wrap justify-center gap-2 text-xs text-slate-500">
-                  <span className="rounded-md bg-white px-2.5 py-1.5 ring-1 ring-slate-200">
-                    输入 / 指定能力
-                  </span>
-                  <span className="rounded-md bg-white px-2.5 py-1.5 ring-1 ring-slate-200">
-                    Enter 发送
-                  </span>
-                  <span className="rounded-md bg-white px-2.5 py-1.5 ring-1 ring-slate-200">
-                    Shift + Enter 换行
-                  </span>
-                </div>
-              </div>
-            </div>
-          ) : (
-            messages.map((message) => (
-              <div
-                className={
-                  message.role === "user"
-                    ? "flex items-start justify-end gap-3"
-                    : "flex items-start justify-start gap-3"
-                }
-                key={message.id}
-              >
-                {message.role === "assistant" ? renderAvatar(message.role) : null}
-                <div
-                  className={
-                    message.role === "user"
-                      ? "flex max-w-[78%] flex-col items-end"
-                      : "flex max-w-[82%] flex-col items-start"
-                  }
-                >
-                  <time className="mb-1 px-1 text-[11px] text-slate-400">
-                    {formatDateTime(message.timestamp)}
-                  </time>
-                  <article
-                    className={
-                      message.role === "user"
-                        ? "rounded-2xl bg-slate-100 px-4 py-3 text-sm leading-6 shadow-sm"
-                        : "whitespace-pre-line rounded-2xl bg-white px-1 py-1 text-sm leading-7 text-slate-800"
-                    }
-                  >
-                    <MessageContent content={message.content} />
-                  </article>
-                </div>
-                {message.role === "user" ? renderAvatar(message.role) : null}
-              </div>
-            ))
-          )}
-          {isSubmitting ? (
-            <div className="flex items-start justify-start gap-3">
-              {renderAvatar("assistant")}
-              <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                正在处理...
-              </div>
-            </div>
-          ) : null}
-          {error ? (
-            <p className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">
-              {error}
-            </p>
-          ) : null}
-          {commandError ? (
-            <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-700">
-              {commandError}
-            </p>
-          ) : null}
-        </div>
+      <section
+        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+        style={{ backgroundColor: activeTheme.background }}
+      >
+        <WorkerHeader
+          accentColor={activeTheme.accent}
+          isSubmitting={isSubmitting}
+          onClearChat={clearChat}
+          onLogout={onLogout}
+          status={status}
+          user={user}
+        />
 
-        <div className="sticky bottom-0 border-t border-slate-100 bg-white py-4">
-          <SlashCommandMenu
-            onSelect={addCommand}
-            options={commandOptions}
-            visible={slashQuery !== null}
-          />
-          <div className="flex items-end gap-2 rounded-2xl border border-slate-300 bg-white p-2 shadow-lg shadow-slate-200/60">
-            <SelectedCommandChips
-              onRemove={removeCommand}
-              selections={selectedCommands}
-            />
-            <textarea
-              className="max-h-40 min-h-11 flex-1 resize-none border-0 px-2 py-2 text-sm outline-none"
-              disabled={isSubmitting}
-              onChange={(event) => setQuestion(event.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="输入消息，或输入 / 指定 Skill/MCP"
-              value={question}
-            />
-            <button
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-              disabled={!question.trim() || isSubmitting}
-              onClick={handleSubmit}
-              title="发送"
-              type="button"
-            >
-              <SendHorizonal size={18} />
-            </button>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4">
+            <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col">
+              <WorkerChatPanel
+                commandError={commandError}
+                error={error}
+                isSubmitting={isSubmitting}
+                messages={messages}
+                theme={activeTheme}
+              />
+            </div>
+          </div>
+
+          <div className="shrink-0 border-t border-slate-100 px-4 py-4">
+            <div className="mx-auto w-full max-w-4xl">
+              <WorkerComposer
+                activeAccent={activeTheme.accent}
+                attachments={attachments}
+                commandOptions={commandOptions}
+                isSubmitting={isSubmitting}
+                onAddFiles={addFiles}
+                onKeyDown={handleKeyDown}
+                onQuestionChange={setQuestion}
+                onRemoveAttachment={removeAttachment}
+                onRemoveCommand={removeCommand}
+                onSelectCommand={addCommand}
+                onSubmit={handleSubmit}
+                question={question}
+                selectedCommands={selectedCommands}
+                showSlashMenu={slashQuery !== null}
+              />
+            </div>
           </div>
         </div>
       </section>

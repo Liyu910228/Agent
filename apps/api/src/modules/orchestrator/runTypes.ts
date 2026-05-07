@@ -1,5 +1,15 @@
 import type { QuestionType } from "./router.js";
 
+export interface RunAttachment {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  kind: "image" | "document";
+  dataUrl?: string;
+  textContent?: string;
+}
+
 export interface RunStep {
   id: string;
   type: "agent" | "skill" | "mcp";
@@ -30,6 +40,7 @@ export interface RunRecord {
   usedSkills: string[];
   usedMcpTools: string[];
   usedModels: string[];
+  attachments?: RunAttachment[];
   steps: RunStep[];
 }
 
